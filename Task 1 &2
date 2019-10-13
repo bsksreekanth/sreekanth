@@ -1,0 +1,127 @@
+--TASK 1
+
+CREATE TABLE POSTS(
+POST_ID  SERIAL PRIMARY KEY,
+POST_CONTENT  TEXT,
+POST_TITLE  VARCHAR(255),
+POST_AUTHOR VARCHAR(255));
+----------------------------------------
+CREATE TYPE OPERATION AS ENUM ('UPSERT', 'DELETE', 'QUERY');
+--------------------------------------
+
+CREATE type POSTS_json
+AS 
+(
+POST_ID INTEGER,
+POST_CONTENT  TEXT,
+POST_TITLE  VARCHAR(255),
+POST_AUTHOR VARCHAR(255));
+
+INSERT INTO POSTS(POST_CONTENT,POST_TITLE,POST_AUTHOR)
+VALUES('thriller','Harry Porter','paris'),
+      ('fiction','behind closed doors','Rowling'),
+	  ('fiction1','Harry Porter1','Rowling3'));
+
+      
+CREATE TABLE POSTS(
+POST_ID  SERIAL PRIMARY KEY,
+POST_CONTENT  TEXT,
+POST_TITLE  VARCHAR(255),
+POST_AUTHOR VARCHAR(255));
+
+CREATE TYPE OPERATION AS ENUM ('UPSERT', 'DELETE', 'QUERY');
+
+CREATE OR REPLACE FUNCTION FN_CRUDQ_POSTS(DATA_OBJECT JSONB,
+                                          OPERATION_fn OPERATION )--\\enumtype                      
+RETURNS TABLE(POSTID INT,POSTCONTENT  TEXT,POSTTITLE  VARCHAR ,POSTAUTHOR VARCHAR )
+AS $$
+
+BEGIN
+
+Raise notice '%',OPERATION_fn;
+
+IF OPERATION_fn = 'UPSERT' THEN
+raise notice '1';
+UPDATE Posts P SET POST_CONTENT = T.POST_CONTENT , POST_TITLE=T.POST_TITLE,POST_AUTHOR=T.POST_AUTHOR
+FROM jsonb_populate_recordset(null::POSTS_json, DATA_OBJECT) AS T
+WHERE P.POST_ID = T.POST_ID;
+
+INSERT INTO POSTS(post_id,POST_CONTENT,POST_TITLE,POST_AUTHOR)
+SELECT L.Post_id,L.POST_CONTENT,L.POST_TITLE,L.POST_AUTHOR FROM
+(
+select * from jsonb_populate_recordset(null::POSTS_json, DATA_OBJECT)
+) L
+LEFT OUTER JOIN POSTS R
+ON L.POST_ID = R.POST_ID
+WHERE R.POST_ID IS NULL;
+
+RETURN QUERY
+select * from jsonb_populate_recordset(null::POSTS_json, DATA_OBJECT);
+END IF;
+
+IF OPERATION_fn = 'DELETE' THEN
+DELETE FROM Posts P
+USING (SELECT * FROM jsonb_populate_recordset(null::POSTS_json, DATA_OBJECT)) T
+WHERE P.POST_ID = T.POST_ID;
+
+RETURN QUERY
+select * from jsonb_populate_recordset(null::POSTS_json, DATA_OBJECT) ;
+END IF;
+
+IF OPERATION_fn = 'QUERY' THEN
+RETURN QUERY
+SELECT POST_ID ,POST_CONTENT ,POST_TITLE ,POST_AUTHOR FROM POSTS;
+END IF;
+
+END;
+$$ LANGUAGE 'plpgsql';
+
+/*
+select * From FN_CRUDQ_POSTS('[{"post_id":1,"post_content":"thriller","post_title":"behind closed doors","post_author":"paris"},
+{"post_id":2,"post_content":"fiction","post_title":"Harry Porter","post_author":"Rowling"},
+{"post_id":3,"post_content":"fiction1","post_title":"Harry Porter1","post_author":"Rowling3"}]','UPSERT');
+*/
+-------------------------
+
+--Task 2:
+
+--select * From FN_GET_COUNTS('{"post_content":"fiction"}');
+CREATE OR REPLACE FUNCTION FN_GET_COUNTS(DATA_OBJECT JSONB)
+RETURNS JSONB
+AS $$
+DECLARE v_searchvalue Text;
+DECLARE v_jsnob JSONB;
+BEGIN
+
+select value::TEXT INTO v_searchvalue from jsonb_each(DATA_OBJECT);
+
+v_searchvalue := REPLACE(v_searchvalue,'"','');
+
+raise notice '%',v_searchvalue;
+with CTE
+AS
+(
+SELECT  (SELECT regexp_matches(POST_CONTENT, v_searchvalue,'g')) as OCCURRENCES FROM posts
+),
+CTE1
+AS
+(
+select count(DISTINCT OCCURRENCES) FREQUENCY,count(OCCURRENCES) COUNT From CTE
+where OCCURRENCES :: text <> ''
+)
+select  jsonb_build_object(
+        'FREQUENCY', json_agg(FREQUENCY),
+        'COUNT', json_agg(COUNT)
+    ) INTO v_jsnob From CTE1;
+
+
+RETURN v_jsnob;    
+
+END;
+$$ LANGUAGE 'plpgsql';
+---------------------------
+/*
+Out put:
+
+"{"COUNT": [2], "FREQUENCY": [1]}"
+*/
