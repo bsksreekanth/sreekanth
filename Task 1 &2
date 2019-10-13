@@ -22,13 +22,6 @@ VALUES('thriller','Harry Porter','paris'),
       ('fiction','behind closed doors','Rowling'),
 	  ('fiction1','Harry Porter1','Rowling3'));
 
-      
-CREATE TABLE POSTS(
-POST_ID  SERIAL PRIMARY KEY,
-POST_CONTENT  TEXT,
-POST_TITLE  VARCHAR(255),
-POST_AUTHOR VARCHAR(255));
-
 CREATE TYPE OPERATION AS ENUM ('UPSERT', 'DELETE', 'QUERY');
 
 CREATE OR REPLACE FUNCTION FN_CRUDQ_POSTS(DATA_OBJECT JSONB,
